@@ -13,6 +13,24 @@ root, .border-pane {
     -fx-text-fill: white;
 }
 
+/* Dropdown menu items: white background, black text, blue hover */
+.menu-item {
+    -fx-background-color: white;
+}
+
+.menu-item .label {
+    -fx-text-fill: black;
+}
+
+.menu-item:focused, .menu-item:hover {
+    -fx-background-color: #e3f2fd;
+}
+
+.context-menu {
+    -fx-background-color: white;
+    -fx-padding: 0;
+}
+
 .tool-bar {
     -fx-background-color: #f0f2f7;
     -fx-padding: 6 10 6 10;
