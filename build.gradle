@@ -1,0 +1,91 @@
+plugins {
+    id 'application'
+    id 'java'
+}
+
+group = 'com.collabwhiteboard'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(23)
+    }
+}
+
+ext {
+    javafxVersion = '21.0.4'
+    def osName = System.getProperty('os.name').toLowerCase()
+    def arch = System.getProperty('os.arch').toLowerCase()
+    if (osName.contains('win')) {
+        javafxPlatform = 'win'
+    } else if (osName.contains('mac')) {
+        javafxPlatform = arch.contains('aarch64') || arch.contains('arm') ? 'mac-aarch64' : 'mac'
+    } else {
+        javafxPlatform = arch.contains('aarch64') || arch.contains('arm') ? 'linux-aarch64' : 'linux'
+    }
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.11.0'
+
+    // JavaFX (platform-specific classifiers)
+    implementation "org.openjfx:javafx-base:${javafxVersion}:${javafxPlatform}"
+    implementation "org.openjfx:javafx-controls:${javafxVersion}:${javafxPlatform}"
+    implementation "org.openjfx:javafx-graphics:${javafxVersion}:${javafxPlatform}"
+    implementation "org.openjfx:javafx-fxml:${javafxVersion}:${javafxPlatform}"
+    implementation "org.openjfx:javafx-swing:${javafxVersion}:${javafxPlatform}"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+}
+
+application {
+    // Main JavaFX client
+    mainClass = 'com.collabwhiteboard.client.ClientApp'
+}
+
+// Convenience task to run the TCP server (no JavaFX needed here)
+tasks.register('runServer', JavaExec) {
+    group = 'application'
+    description = 'Run the collaborative whiteboard TCP server'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.collabwhiteboard.server.ServerMain'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+// JavaFX modules via system JVM (no extra plugin to keep it simple here).
+run {
+    jvmArgs = [
+            '--module-path', configurations.runtimeClasspath.asPath,
+            '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics'
+    ]
+}
+
+// Dedicated client run task that prefers PATH_TO_FX if set
+tasks.register('runClient', JavaExec) {
+    group = 'application'
+    description = 'Run the collaborative whiteboard JavaFX client'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.collabwhiteboard.client.ClientApp'
+
+    doFirst {
+        def fxPath = System.getenv('PATH_TO_FX')
+        if (fxPath != null && !fxPath.isBlank()) {
+            jvmArgs = [
+                    '--module-path', fxPath,
+                    '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics,javafx.swing'
+            ]
+        } else {
+            jvmArgs = [
+                    '--module-path', configurations.runtimeClasspath.asPath,
+                    '--add-modules', 'javafx.controls,javafx.fxml,javafx.graphics,javafx.swing'
+            ]
+        }
+    }
+}

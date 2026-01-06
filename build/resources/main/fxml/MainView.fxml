@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="com.collabwhiteboard.client.MainController">
+    <top>
+        <MenuBar>
+            <menus>
+                <Menu text="File">
+                    <items>
+                        <MenuItem text="Save Whiteboard" onAction="#onSaveBoard"/>
+                        <MenuItem text="Share Whiteboard" onAction="#onShareBoard"/>
+                        <MenuItem text="Send File" onAction="#onSendFile"/>
+                    </items>
+                </Menu>
+                <Menu text="Board">
+                    <items>
+                        <MenuItem text="Clear Board" onAction="#onClearBoard"/>
+                    </items>
+                </Menu>
+            </menus>
+        </MenuBar>
+    </top>
+    <center>
+        <SplitPane orientation="VERTICAL">
+            <items>
+                <BorderPane>
+                    <top>
+                        <ToolBar>
+                            <items>
+                                <Label text="Color:"/>
+                                <ColorPicker fx:id="colorPicker"/>
+                                <Separator orientation="VERTICAL"/>
+                                <Label text="Stroke:"/>
+                                <Slider fx:id="strokeSlider" min="1" max="15" prefWidth="150"/>
+                                <Button text="Clear" onAction="#onClearBoard"/>
+                            </items>
+                        </ToolBar>
+                    </top>
+                    <center>
+                        <StackPane>
+                            <Canvas fx:id="whiteboardCanvas" width="800" height="400"
+                                    onMousePressed="#onCanvasPressed"
+                                    onMouseDragged="#onCanvasDragged"/>
+                        </StackPane>
+                    </center>
+                </BorderPane>
+                <BorderPane>
+                    <center>
+                        <TextArea fx:id="chatArea" editable="false" wrapText="true"/>
+                    </center>
+                    <bottom>
+                        <HBox spacing="5">
+                            <padding>
+                                <Insets top="5" right="5" bottom="5" left="5"/>
+                            </padding>
+                            <TextField fx:id="chatInput" HBox.hgrow="ALWAYS" onAction="#onChatSend"/>
+                            <Button text="Send" onAction="#onChatSend"/>
+                        </HBox>
+                    </bottom>
+                </BorderPane>
+            </items>
+        </SplitPane>
+    </center>
+    <right>
+        <VBox spacing="5" prefWidth="200">
+            <padding>
+                <Insets top="5" right="5" bottom="5" left="5"/>
+            </padding>
+            <Label text="Connected Clients"/>
+            <ListView fx:id="clientListView" VBox.vgrow="ALWAYS"/>
+            <Button fx:id="sendFileButton" text="Send File" onAction="#onSendFile" maxWidth="Infinity"/>
+        </VBox>
+    </right>
+    <bottom>
+        <Label fx:id="statusLabel" text="Not connected">
+            <padding>
+                <Insets top="5" right="5" bottom="5" left="5"/>
+            </padding>
+        </Label>
+    </bottom>
+</BorderPane>
+
+
