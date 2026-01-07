@@ -1,0 +1,6 @@
+# IDE and OS files
+.DS_Store
+
+# Gradle and build outputs
+.gradle/
+build/

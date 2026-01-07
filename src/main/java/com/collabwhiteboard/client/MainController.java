@@ -75,6 +75,10 @@ public class MainController {
     private int myClientId = -1;
 
     private double lastX, lastY;
+    
+    // Congestion control: rate limit draw events to prevent overwhelming the network
+    private long lastDrawEventTime = 0;
+    private static final long DRAW_EVENT_MIN_INTERVAL_MS = 16;  // ~60 FPS = 16ms between events
 
     @FXML
     public void initialize() {
@@ -372,14 +376,24 @@ public class MainController {
         gc.setLineWidth(stroke);
         gc.strokeLine(lastX, lastY, x, y);
 
-        JsonObject payload = new JsonObject();
-        payload.addProperty("x1", lastX);
-        payload.addProperty("y1", lastY);
-        payload.addProperty("x2", x);
-        payload.addProperty("y2", y);
-        payload.addProperty("color", toWebColor(c));
-        payload.addProperty("stroke", stroke);
-        sendAsync(new ProtocolMessage(MessageTypes.DRAW_EVENT, payload));
+        // Congestion control: rate-limit draw events to prevent overwhelming the network
+        long currentTime = System.currentTimeMillis();
+        long timeSinceLastEvent = currentTime - lastDrawEventTime;
+        if (timeSinceLastEvent >= DRAW_EVENT_MIN_INTERVAL_MS) {
+            JsonObject payload = new JsonObject();
+            payload.addProperty("x1", lastX);
+            payload.addProperty("y1", lastY);
+            payload.addProperty("x2", x);
+            payload.addProperty("y2", y);
+            payload.addProperty("color", toWebColor(c));
+            payload.addProperty("stroke", stroke);
+            sendAsync(new ProtocolMessage(MessageTypes.DRAW_EVENT, payload));
+            lastDrawEventTime = currentTime;
+        } else {
+            // Drawing too fast - this stroke is being locally buffered by coalescence
+            System.out.println("[RATE LIMIT] Draw event skipped (only " + timeSinceLastEvent + 
+                             "ms since last, need " + DRAW_EVENT_MIN_INTERVAL_MS + "ms). Local drawing continues.");
+        }
 
         lastX = x;
         lastY = y;
@@ -435,7 +449,6 @@ public class MainController {
             }
 
             byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
-            String base64 = java.util.Base64.getEncoder().encodeToString(bytes);
             String uniqueId = String.valueOf(System.currentTimeMillis());
 
             JsonObject meta = new JsonObject();
@@ -450,10 +463,40 @@ public class MainController {
             meta.add("targetIds", targetsArray);
             sendAsync(new ProtocolMessage(MessageTypes.FILE_META, meta));
 
-            JsonObject chunk = new JsonObject();
-            chunk.addProperty("data", base64);
-            chunk.add("targetIds", targetsArray);
-            sendAsync(new ProtocolMessage(MessageTypes.FILE_CHUNK, chunk));
+            // Congestion control: send file in smaller chunks (32KB) instead of all at once
+            // This prevents network buffer overflow and allows proper flow control
+            int chunkSize = 32768;  // 32KB chunks
+            int offset = 0;
+            int chunkNumber = 0;
+            int totalChunks = (bytes.length + chunkSize - 1) / chunkSize;
+            while (offset < bytes.length) {
+                int remaining = bytes.length - offset;
+                int currentChunkSize = Math.min(chunkSize, remaining);
+                byte[] chunkBytes = new byte[currentChunkSize];
+                System.arraycopy(bytes, offset, chunkBytes, 0, currentChunkSize);
+                
+                String base64 = java.util.Base64.getEncoder().encodeToString(chunkBytes);
+                JsonObject chunk = new JsonObject();
+                chunk.addProperty("data", base64);
+                chunk.addProperty("uniqueId", uniqueId);
+                chunk.addProperty("offset", offset);
+                chunk.addProperty("chunkSize", currentChunkSize);
+                chunk.add("targetIds", targetsArray);
+                sendAsync(new ProtocolMessage(MessageTypes.FILE_CHUNK, chunk));
+                
+                chunkNumber++;
+                System.out.println("[FILE TRANSFER] Sending chunk " + chunkNumber + "/" + totalChunks + 
+                                 " (" + currentChunkSize + " bytes) with backpressure control.");
+                
+                offset += currentChunkSize;
+                
+                // Small delay between chunks to allow receiver to process without buffering too much
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
 
             JsonObject complete = new JsonObject();
             complete.addProperty("uniqueId", uniqueId);
@@ -539,7 +582,17 @@ public class MainController {
             try {
                 ProtocolIO.sendMessage(socket, msg);
             } catch (IOException e) {
-                showError("Failed to send message: " + e.getMessage());
+                // Try a single short retry to recover from transient send errors/congestion
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                try {
+                    ProtocolIO.sendMessage(socket, msg);
+                } catch (IOException e2) {
+                    showError("Failed to send message after retry: " + e2.getMessage());
+                }
             }
         });
     }

@@ -127,6 +127,26 @@ public class ServerCore implements Runnable {
     }
 
     private void broadcastFrom(int clientId, ProtocolMessage message) {
+        // Apply congestion control: drop DRAW_EVENT messages if broadcast queue backs up
+        // This prevents one slow client from blocking all drawing updates
+        if (message.getType() == MessageTypes.DRAW_EVENT && clients.size() > 1) {
+            // Count clients with significant backlog to detect congestion
+            int backlogCount = 0;
+            for (ClientSession s : clients.values()) {
+                if (s.getClientId() != clientId && s.hasBacklog()) {
+                    backlogCount++;
+                }
+            }
+            // If more than 50% of other clients have backlog, drop this draw event
+            // to allow backpressure and prevent queue overflow
+            if (backlogCount > (clients.size() - 1) / 2) {
+                System.out.println("[CONGESTION CONTROL] DROPPING DRAW_EVENT from Client-" + clientId + 
+                                 ". Reason: " + backlogCount + "/" + (clients.size() - 1) + 
+                                 " clients have backlog. Protecting network from overflow.");
+                return;
+            }
+        }
+        
         for (ClientSession s : clients.values()) {
             s.send(message);
         }
