@@ -14,7 +14,11 @@ public enum MessageTypes {
     FILE_CHUNK,         // file transfer chunk
     FILE_COMPLETE,      // file transfer finished
     SERVER_INFO,        // server informational messages
-    ERROR               // error messages
+    ERROR,              // error messages
+    // Congestion control message types
+    PACKET,             // data packet with sequence number (for congestion control)
+    ACK,                // acknowledgment with sequence number
+    CONGESTION_STATS    // congestion control statistics update
 }
 
 

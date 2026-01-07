@@ -1,7 +1,6 @@
 package com.collabwhiteboard.server;
 
 import com.collabwhiteboard.common.MessageTypes;
-import com.collabwhiteboard.common.ProtocolIO;
 import com.collabwhiteboard.common.ProtocolMessage;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

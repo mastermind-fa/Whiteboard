@@ -1,19 +1,26 @@
 package com.collabwhiteboard.client;
 
+import com.collabwhiteboard.common.CongestionAwareProtocolIO;
+import com.collabwhiteboard.common.CongestionController;
+import com.collabwhiteboard.common.CongestionMode;
 import com.collabwhiteboard.common.MessageTypes;
 import com.collabwhiteboard.common.ProtocolIO;
 import com.collabwhiteboard.common.ProtocolMessage;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import javafx.application.Platform;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
@@ -42,6 +49,9 @@ public class MainController {
 
     @FXML
     private Canvas whiteboardCanvas;
+    
+    @FXML
+    private StackPane canvasContainer;
 
     @FXML
     private ColorPicker colorPicker;
@@ -61,9 +71,35 @@ public class MainController {
     @FXML
     private Label statusLabel;
 
+    // Congestion control UI components
+    @FXML
+    private ToggleButton congestionControlToggle;
+    @FXML
+    private RadioButton tahoeRadio;
+    @FXML
+    private RadioButton renoRadio;
+    @FXML
+    private Label cwndLabel;
+    @FXML
+    private Label ssthreshLabel;
+    @FXML
+    private Label rttLabel;
+    @FXML
+    private Label phaseLabel;
+    @FXML
+    private LineChart<Number, Number> cwndChart;
+    @FXML
+    private Slider lossRateSlider;
+    @FXML
+    private Slider delaySlider;
+    @FXML
+    private TextArea congestionLog;
+
     private GraphicsContext gc;
 
     private Socket socket;
+    private CongestionAwareProtocolIO congestionAwareIO;
+    private boolean congestionControlEnabled = false;
     // Separate executors for reading and sending so outgoing messages are not blocked by the read loop.
     private final ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService sendExecutor = Executors.newSingleThreadExecutor();
@@ -80,14 +116,102 @@ public class MainController {
     public void initialize() {
         gc = whiteboardCanvas.getGraphicsContext2D();
         gc.setFill(Color.WHITE);
-        gc.fillRect(0, 0, whiteboardCanvas.getWidth(), whiteboardCanvas.getHeight());
         gc.setStroke(Color.BLACK);
         gc.setLineWidth(2.0);
 
         colorPicker.setValue(Color.BLACK);
         strokeSlider.setValue(2.0);
 
+        // Make canvas responsive to container size
+        if (canvasContainer != null) {
+            // Bind canvas size to container size
+            whiteboardCanvas.widthProperty().bind(canvasContainer.widthProperty());
+            whiteboardCanvas.heightProperty().bind(canvasContainer.heightProperty());
+            
+            // Fill new areas with white when canvas grows (but preserve existing drawings)
+            whiteboardCanvas.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() > oldVal.doubleValue()) {
+                    Platform.runLater(() -> {
+                        gc.setFill(Color.WHITE);
+                        gc.fillRect(oldVal.doubleValue(), 0, newVal.doubleValue() - oldVal.doubleValue(), whiteboardCanvas.getHeight());
+                    });
+                }
+            });
+            whiteboardCanvas.heightProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() > oldVal.doubleValue()) {
+                    Platform.runLater(() -> {
+                        gc.setFill(Color.WHITE);
+                        gc.fillRect(0, oldVal.doubleValue(), whiteboardCanvas.getWidth(), newVal.doubleValue() - oldVal.doubleValue());
+                    });
+                }
+            });
+        }
+        
+        // Initial draw - fill entire canvas with white
+        redrawCanvas();
+
+        // Initialize congestion control UI
+        initializeCongestionControlUI();
+
         connectToServer();
+    }
+    
+    private void redrawCanvas() {
+        Platform.runLater(() -> {
+            double width = whiteboardCanvas.getWidth();
+            double height = whiteboardCanvas.getHeight();
+            if (width > 0 && height > 0) {
+                gc.setFill(Color.WHITE);
+                gc.fillRect(0, 0, width, height);
+            }
+        });
+    }
+
+    private void initializeCongestionControlUI() {
+        // Set up ToggleGroup for radio buttons
+        if (tahoeRadio != null && renoRadio != null) {
+            ToggleGroup modeGroup = new ToggleGroup();
+            tahoeRadio.setToggleGroup(modeGroup);
+            renoRadio.setToggleGroup(modeGroup);
+        }
+
+        // Initialize chart
+        if (cwndChart != null) {
+            XYChart.Series<Number, Number> series = new XYChart.Series<>();
+            series.setName("cwnd");
+            cwndChart.getData().add(series);
+            cwndChart.setAnimated(false);
+            cwndChart.setCreateSymbols(false);
+            // Set initial point at (0, 1) for round 0
+            series.getData().add(new XYChart.Data<>(0, 1));
+        }
+
+        // Set up sliders
+        if (lossRateSlider != null) {
+            lossRateSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+                if (congestionAwareIO != null) {
+                    congestionAwareIO.setPacketLossRate(newVal.doubleValue() / 100.0);
+                }
+            });
+        }
+
+        if (delaySlider != null) {
+            delaySlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+                if (congestionAwareIO != null) {
+                    congestionAwareIO.setNetworkDelay(newVal.longValue());
+                }
+            });
+        }
+
+        // Disable congestion control UI initially
+        updateCongestionControlUIState(false);
+    }
+
+    private void updateCongestionControlUIState(boolean enabled) {
+        if (tahoeRadio != null) tahoeRadio.setDisable(!enabled);
+        if (renoRadio != null) renoRadio.setDisable(!enabled);
+        if (lossRateSlider != null) lossRateSlider.setDisable(!enabled);
+        if (delaySlider != null) delaySlider.setDisable(!enabled);
     }
 
     private void connectToServer() {
@@ -127,6 +251,7 @@ public class MainController {
         try {
             socket = new Socket(host, port);
             statusLabel.setText("Connected to " + host + ":" + port);
+            
             sendHello();
             startReaderLoop();
         } catch (IOException e) {
@@ -135,11 +260,152 @@ public class MainController {
         }
     }
 
+    @FXML
+    private void onToggleCongestionControl() {
+        if (congestionControlToggle == null || socket == null || socket.isClosed()) {
+            return;
+        }
+
+        boolean shouldEnable = congestionControlToggle.isSelected();
+        
+        if (shouldEnable && !congestionControlEnabled) {
+            // Enable congestion control
+            try {
+                CongestionMode mode = tahoeRadio != null && tahoeRadio.isSelected() 
+                    ? CongestionMode.TAHOE 
+                    : CongestionMode.RENO;
+                
+                congestionAwareIO = new CongestionAwareProtocolIO(socket, mode);
+                
+                // Set network parameters
+                if (lossRateSlider != null) {
+                    congestionAwareIO.setPacketLossRate(lossRateSlider.getValue() / 100.0);
+                }
+                if (delaySlider != null) {
+                    congestionAwareIO.setNetworkDelay((long) delaySlider.getValue());
+                }
+                
+                // Set up stats callback
+                congestionAwareIO.setStatsCallback(this::updateCongestionStats);
+                
+                congestionControlEnabled = true;
+                updateCongestionControlUIState(true);
+                
+                // Clear and reset chart
+                if (cwndChart != null && !cwndChart.getData().isEmpty()) {
+                    cwndChart.getData().get(0).getData().clear();
+                    cwndChart.getData().get(0).getData().add(new XYChart.Data<>(0, 1));
+                }
+                
+                appendCongestionLog("Congestion control enabled: " + mode);
+                
+            } catch (IOException e) {
+                showError("Failed to enable congestion control: " + e.getMessage());
+                congestionControlToggle.setSelected(false);
+            }
+        } else if (!shouldEnable && congestionControlEnabled) {
+            // Disable congestion control
+            if (congestionAwareIO != null) {
+                congestionAwareIO.shutdown();
+                congestionAwareIO = null;
+            }
+            congestionControlEnabled = false;
+            updateCongestionControlUIState(false);
+            appendCongestionLog("Congestion control disabled");
+        }
+    }
+
+    private void updateCongestionStats(CongestionController.CongestionStats stats) {
+        Platform.runLater(() -> {
+            if (cwndLabel != null) {
+                cwndLabel.setText(String.format("cwnd: %d", stats.cwnd));
+            }
+            if (ssthreshLabel != null) {
+                ssthreshLabel.setText(String.format("ssthresh: %d", stats.ssthresh));
+            }
+            if (rttLabel != null) {
+                rttLabel.setText(String.format("RTT: %dms", stats.rtt));
+            }
+            if (phaseLabel != null) {
+                phaseLabel.setText("Phase: " + stats.phase);
+            }
+
+            // Update chart with transmission rounds
+            // Always add a point to capture all phase transitions and events
+            if (cwndChart != null && !cwndChart.getData().isEmpty()) {
+                XYChart.Series<Number, Number> series = cwndChart.getData().get(0);
+                ObservableList<XYChart.Data<Number, Number>> data = series.getData();
+                
+                int currentRound = stats.transmissionRound;
+                int currentCwnd = stats.cwnd;
+                
+                // Always add a new point to capture cwnd changes
+                // This ensures we see fast retransmit drops, timeout drops, and all transitions
+                if (data.isEmpty()) {
+                    // First point
+                    data.add(new XYChart.Data<>(currentRound, currentCwnd));
+                } else {
+                    XYChart.Data<Number, Number> lastPoint = data.get(data.size() - 1);
+                    int lastRound = lastPoint.getXValue().intValue();
+                    int lastCwnd = lastPoint.getYValue().intValue();
+                    
+                    // Add new point if:
+                    // 1. Round changed, OR
+                    // 2. cwnd changed significantly (for fast retransmit/timeout events)
+                    if (currentRound > lastRound || Math.abs(currentCwnd - lastCwnd) > 0) {
+                        // If same round but cwnd changed (fast retransmit/timeout), add point at same round
+                        // This creates a vertical drop in the graph
+                        if (currentRound == lastRound && currentCwnd != lastCwnd) {
+                            data.add(new XYChart.Data<>(currentRound, currentCwnd));
+                        } else if (currentRound > lastRound) {
+                            // New round - add point
+                            data.add(new XYChart.Data<>(currentRound, currentCwnd));
+                        }
+                    }
+                }
+                
+                // Keep only last 200 points to show more history
+                if (data.size() > 200) {
+                    data.remove(0);
+                }
+                
+                // Auto-scale X axis
+                if (data.size() > 1) {
+                    NumberAxis xAxis = (NumberAxis) cwndChart.getXAxis();
+                    int maxRound = data.get(data.size() - 1).getXValue().intValue();
+                    xAxis.setLowerBound(Math.max(0, maxRound - 50));
+                    xAxis.setUpperBound(maxRound + 5);
+                    
+                    // Auto-scale Y axis to show full range
+                    NumberAxis yAxis = (NumberAxis) cwndChart.getYAxis();
+                    int maxCwnd = data.stream()
+                        .mapToInt(d -> d.getYValue().intValue())
+                        .max()
+                        .orElse(100);
+                    yAxis.setUpperBound(Math.max(maxCwnd + 10, 20));
+                }
+            }
+        });
+    }
+
+    private void appendCongestionLog(String message) {
+        if (congestionLog != null) {
+            Platform.runLater(() -> {
+                String timestamp = String.format("[%tT]", System.currentTimeMillis());
+                congestionLog.appendText(timestamp + " " + message + "\n");
+            });
+        }
+    }
+
     private void sendHello() throws IOException {
         JsonObject payload = new JsonObject();
         payload.addProperty("name", displayName);
         ProtocolMessage msg = new ProtocolMessage(MessageTypes.HELLO, payload);
-        ProtocolIO.sendMessage(socket, msg);
+        if (congestionControlEnabled && congestionAwareIO != null) {
+            congestionAwareIO.sendMessage(msg);
+        } else {
+            ProtocolIO.sendMessage(socket, msg);
+        }
     }
 
     private void startReaderLoop() {
@@ -468,7 +734,6 @@ public class MainController {
     }
 
     private java.util.List<Integer> promptForRecipients() {
-        java.util.List<Integer> selected = new java.util.ArrayList<>();
         Platform.runLater(() -> statusLabel.setText("Choosing recipients..."));
 
         Dialog<java.util.List<Integer>> dialog = new Dialog<>();
@@ -537,7 +802,11 @@ public class MainController {
         if (socket == null || socket.isClosed()) return;
         sendExecutor.submit(() -> {
             try {
-                ProtocolIO.sendMessage(socket, msg);
+                if (congestionControlEnabled && congestionAwareIO != null) {
+                    congestionAwareIO.sendMessage(msg);
+                } else {
+                    ProtocolIO.sendMessage(socket, msg);
+                }
             } catch (IOException e) {
                 showError("Failed to send message: " + e.getMessage());
             }
@@ -552,10 +821,7 @@ public class MainController {
     }
 
     private void clearBoardLocal() {
-        Platform.runLater(() -> {
-            gc.setFill(Color.WHITE);
-            gc.fillRect(0, 0, whiteboardCanvas.getWidth(), whiteboardCanvas.getHeight());
-        });
+        redrawCanvas();
     }
 
     private void showError(String msg) {
@@ -569,6 +835,9 @@ public class MainController {
 
     public void shutdown() {
         running = false;
+        if (congestionAwareIO != null) {
+            congestionAwareIO.shutdown();
+        }
         if (socket != null) {
             try {
                 socket.close();

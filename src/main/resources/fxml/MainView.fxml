@@ -2,6 +2,8 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
@@ -42,8 +44,8 @@
                         </ToolBar>
                     </top>
                     <center>
-                        <StackPane>
-                            <Canvas fx:id="whiteboardCanvas" width="800" height="400"
+                        <StackPane fx:id="canvasContainer">
+                            <Canvas fx:id="whiteboardCanvas"
                                     onMousePressed="#onCanvasPressed"
                                     onMouseDragged="#onCanvasDragged"/>
                         </StackPane>
@@ -67,14 +69,62 @@
         </SplitPane>
     </center>
     <right>
-        <VBox spacing="5" prefWidth="200">
-            <padding>
-                <Insets top="5" right="5" bottom="5" left="5"/>
-            </padding>
-            <Label text="Connected Clients"/>
-            <ListView fx:id="clientListView" VBox.vgrow="ALWAYS"/>
-            <Button fx:id="sendFileButton" text="Send File" onAction="#onSendFile" maxWidth="Infinity"/>
-        </VBox>
+        <TabPane prefWidth="250" tabClosingPolicy="UNAVAILABLE">
+            <tabs>
+                <Tab text="Clients">
+                    <content>
+                        <VBox spacing="5">
+                            <padding>
+                                <Insets top="5" right="5" bottom="5" left="5"/>
+                            </padding>
+                            <Label text="Connected Clients" style="-fx-font-weight: bold;"/>
+                            <ListView fx:id="clientListView" VBox.vgrow="ALWAYS"/>
+                            <Button fx:id="sendFileButton" text="Send File" onAction="#onSendFile" maxWidth="Infinity"/>
+                        </VBox>
+                    </content>
+                </Tab>
+                <Tab text="Congestion Control">
+                    <content>
+                        <VBox spacing="5">
+                            <padding>
+                                <Insets top="5" right="5" bottom="5" left="5"/>
+                            </padding>
+                            <Label text="Congestion Control" style="-fx-font-weight: bold;"/>
+                            <ToggleButton fx:id="congestionControlToggle" text="Enable" onAction="#onToggleCongestionControl"/>
+                            <Separator/>
+                            <Label text="Mode:"/>
+                            <RadioButton fx:id="tahoeRadio" text="Tahoe" selected="true"/>
+                            <RadioButton fx:id="renoRadio" text="Reno"/>
+                            <Separator/>
+                            <Label text="Metrics:" style="-fx-font-weight: bold;"/>
+                            <Label fx:id="cwndLabel" text="cwnd: 1"/>
+                            <Label fx:id="ssthreshLabel" text="ssthresh: 64"/>
+                            <Label fx:id="rttLabel" text="RTT: 100ms"/>
+                            <Label fx:id="phaseLabel" text="Phase: Slow Start"/>
+                            <Separator/>
+                            <Label text="Graph:" style="-fx-font-weight: bold;"/>
+                            <LineChart fx:id="cwndChart" prefHeight="150" VBox.vgrow="ALWAYS">
+                                <xAxis>
+                                    <NumberAxis label="Transmission Round" lowerBound="0" upperBound="50" tickUnit="5"/>
+                                </xAxis>
+                                <yAxis>
+                                    <NumberAxis label="cwnd (packets)" lowerBound="0" upperBound="100" tickUnit="10"/>
+                                </yAxis>
+                            </LineChart>
+                            <Separator/>
+                            <Label text="Network:" style="-fx-font-weight: bold;"/>
+                            <Label text="Loss Rate:"/>
+                            <Slider fx:id="lossRateSlider" min="0" max="10" value="2" blockIncrement="0.5" showTickLabels="true" showTickMarks="true"/>
+                            <Label text="Delay:"/>
+                            <Slider fx:id="delaySlider" min="0" max="200" value="50" blockIncrement="10" showTickLabels="true" showTickMarks="true"/>
+                            <Separator/>
+                            <Label text="Log:" style="-fx-font-weight: bold;"/>
+                            <TextArea fx:id="congestionLog" prefHeight="100" editable="false" wrapText="true" VBox.vgrow="ALWAYS"/>
+                        </VBox>
+                    </content>
+                </Tab>
+            </tabs>
+        </TabPane>
     </right>
     <bottom>
         <Label fx:id="statusLabel" text="Not connected">

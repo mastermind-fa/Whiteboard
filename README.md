@@ -58,6 +58,25 @@ This project implements a client-server architecture where a central TCP server 
 - **Connection Status**: Visual indication of connection state
 - **Graceful Disconnection**: Proper handling of client disconnections
 
+### TCP Congestion Control Visualization
+
+- **Algorithm Selection**: Toggle between TCP Tahoe and TCP Reno algorithms
+- **Real-time Metrics Display**:
+  - Congestion Window (cwnd): Current window size in packets
+  - Slow Start Threshold (ssthresh): Threshold for phase transition
+  - Round Trip Time (RTT): Estimated network latency
+  - Current Phase: Slow Start, Congestion Avoidance, or Fast Recovery
+- **Interactive Graph**: Live visualization of cwnd vs Transmission Round showing:
+  - Exponential growth during Slow Start
+  - Linear growth during Congestion Avoidance
+  - Fast Retransmit/Recovery behavior (Reno only)
+  - Timeout events and recovery
+- **Network Simulation**:
+  - Configurable packet loss rate (0-10%)
+  - Adjustable network delay (0-200ms)
+- **Activity Log**: Real-time log of congestion control events and state changes
+- **Toggle Control**: Enable/disable congestion control visualization without affecting normal operation
+
 ## Architecture
 
 ### System Architecture
@@ -73,6 +92,11 @@ The application follows a **centralized client-server model**:
   - `ProtocolIO`: Handles low-level TCP message transmission (length-prefixed JSON)
   - `ProtocolMessage`: Message wrapper with type and payload
   - `MessageTypes`: Enumeration of all message types
+  - `CongestionAwareProtocolIO`: Client-side congestion control simulation layer
+  - `CongestionController`: Implements TCP Tahoe and Reno algorithms
+  - `CongestionMode`: Enum for algorithm selection (Tahoe/Reno)
+  - `CongestionPhase`: Enum for phase tracking (Slow Start, Congestion Avoidance, Fast Recovery)
+  - `Packet`: Represents data packets with sequence numbers
 
 - **Client Side**:
   - `ClientApp`: JavaFX application entry point
@@ -207,6 +231,29 @@ When prompted, enter:
 
 The right panel shows all currently connected clients with their IDs and display names. The list updates automatically as clients connect or disconnect.
 
+#### Congestion Control Visualization
+
+The congestion control panel (accessible via the "Congestion Control" tab) provides real-time visualization of TCP congestion control algorithms:
+
+1. **Enable Congestion Control**: Toggle the "Enable" button to activate visualization
+2. **Select Algorithm**: Choose between TCP Tahoe or TCP Reno using radio buttons
+3. **Monitor Metrics**: View real-time values for:
+   - **cwnd**: Current congestion window size
+   - **ssthresh**: Slow start threshold
+   - **RTT**: Estimated round trip time
+   - **Phase**: Current congestion control phase
+4. **View Graph**: The line chart shows cwnd evolution over transmission rounds, displaying:
+   - Slow Start phase (exponential growth)
+   - Congestion Avoidance phase (linear growth)
+   - Fast Retransmit/Recovery events (Reno only)
+   - Timeout events and recovery
+5. **Adjust Network Conditions**: Use sliders to simulate:
+   - **Loss Rate**: Packet loss percentage (0-10%)
+   - **Delay**: Network delay in milliseconds (0-200ms)
+6. **Activity Log**: Monitor congestion control events and state transitions in real-time
+
+**Note**: Congestion control visualization is a client-side simulation that doesn't affect actual message transmission. All messages are still sent using the standard protocol for backward compatibility.
+
 ### Connecting from Different Devices
 
 To connect clients from different devices on the same network:
@@ -242,7 +289,12 @@ Whiteboard/
 │   │   │           └── common/
 │   │   │               ├── MessageTypes.java       # Message type enumeration
 │   │   │               ├── ProtocolMessage.java    # Message wrapper class
-│   │   │               └── ProtocolIO.java         # TCP I/O utilities
+│   │   │               ├── ProtocolIO.java         # TCP I/O utilities
+│   │   │               ├── CongestionController.java # TCP Tahoe/Reno implementation
+│   │   │               ├── CongestionAwareProtocolIO.java # Congestion control simulation
+│   │   │               ├── CongestionMode.java     # Algorithm selection enum
+│   │   │               ├── CongestionPhase.java    # Phase tracking enum
+│   │   │               └── Packet.java             # Packet representation
 │   │   └── resources/
 │   │       ├── fxml/
 │   │       │   └── MainView.fxml                   # UI layout definition
@@ -289,6 +341,9 @@ All messages are transmitted as:
 - `FILE_CHUNK`: File data chunk (Base64 encoded)
 - `FILE_COMPLETE`: File transfer completion signal
 - `SERVER_INFO`: Server status messages
+- `PACKET`: Data packet with sequence number (congestion control simulation)
+- `ACK`: Acknowledgment with sequence number (congestion control simulation)
+- `CONGESTION_STATS`: Congestion control statistics update
 
 ### Connection Flow
 
@@ -324,6 +379,15 @@ The application is designed to work identically across Windows, macOS, and Linux
 - **Flow Control**: Separate threads for reading and writing prevent blocking
 - **Connection Management**: Proper lifecycle management for client connections
 - **State Synchronization**: Server maintains and distributes state to new clients
+- **Congestion Control**: Implementation of TCP Tahoe and Reno algorithms with:
+  - **Slow Start**: Exponential growth of congestion window (cwnd += 1 per ACK)
+  - **Congestion Avoidance**: Linear growth of congestion window (cwnd += 1/cwnd per ACK)
+  - **Fast Retransmit**: Detection of 3 duplicate ACKs (Reno only)
+  - **Fast Recovery**: Recovery without dropping to slow start (Reno only)
+  - **Timeout Handling**: Congestion detection via timeout events
+  - **ssthresh Management**: Slow start threshold adjustment on congestion events
+  - **RTT Estimation**: Round trip time calculation using exponential weighted moving average
+  - **Transmission Round Tracking**: Accurate measurement of congestion window evolution
 
 ### Threading Model
 
