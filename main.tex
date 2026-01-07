@@ -236,6 +236,19 @@ The server maintains awareness of all connected clients:
     \item Connection status monitoring
 \end{itemize}
 
+\section{TCP Congestion Control Visualization}
+
+The application includes a comprehensive congestion control visualization feature:
+
+\begin{itemize}
+    \item \textbf{Algorithm Selection:} Toggle between TCP Tahoe and TCP Reno algorithms
+    \item \textbf{Real-time Metrics:} Display current congestion window (cwnd), slow start threshold (ssthresh), round trip time (RTT), and current phase
+    \item \textbf{Interactive Graph:} Live visualization of cwnd evolution over transmission rounds showing slow start, congestion avoidance, and recovery phases
+    \item \textbf{Network Simulation:} Configurable packet loss rate (0-10\%) and network delay (0-200ms) for testing different network conditions
+    \item \textbf{Activity Log:} Real-time log of congestion control events including phase transitions, timeouts, and fast retransmit events
+    \item \textbf{Client-side Simulation:} Visualization layer that doesn't affect actual message transmission, maintaining backward compatibility
+\end{itemize}
+
 % Section 6: Block Diagram and Work Flow
 \section{Block Diagram and Work Flow}
 \label{sec:workflow}
@@ -548,6 +561,22 @@ The custom protocol demonstrates:
     \item \textbf{Extensibility:} Easy addition of new message types without breaking existing functionality
 \end{itemize}
 
+\section{Congestion Control}
+
+The project implements TCP congestion control algorithms for visualization and educational purposes:
+
+\begin{itemize}
+    \item \textbf{TCP Tahoe:} Implements slow start, congestion avoidance, and timeout handling. On 3 duplicate ACKs, drops cwnd to 1 and re-enters slow start.
+    \item \textbf{TCP Reno:} Extends Tahoe with fast retransmit and fast recovery. On 3 duplicate ACKs, halves cwnd and enters fast recovery phase.
+    \item \textbf{Slow Start:} Exponential growth phase where cwnd increases by 1 for each ACK received, doubling per RTT until reaching ssthresh.
+    \item \textbf{Congestion Avoidance:} Linear growth phase where cwnd increases by 1/cwnd per ACK, resulting in 1 packet increase per RTT.
+    \item \textbf{Fast Retransmit:} Detection of 3 duplicate ACKs triggers immediate retransmission and congestion response (Reno enters fast recovery, Tahoe re-enters slow start).
+    \item \textbf{Fast Recovery:} Reno-specific phase where cwnd is inflated on duplicate ACKs and deflated on new ACK arrival.
+    \item \textbf{Timeout Handling:} Both algorithms handle timeout identically by setting ssthresh = cwnd/2, cwnd = 1, and re-entering slow start.
+    \item \textbf{RTT Estimation:} Uses exponential weighted moving average (EWMA) to estimate round trip time for timeout calculation.
+    \item \textbf{Transmission Round Tracking:} Accurately tracks RTT-based growth by incrementing transmission rounds when full window is acknowledged.
+\end{itemize}
+
 % Section 9: Implementation Details
 \section{Implementation Details}
 \label{sec:implementation}
@@ -768,6 +797,59 @@ Custom stylesheet (\texttt{app.css}) provides:
     \item Cross-platform compatible design
 \end{itemize}
 
+\section{Congestion Control Implementation}
+
+\subsection{CongestionController Class}
+
+The \texttt{CongestionController} class implements the core congestion control algorithms:
+
+\begin{itemize}
+    \item \textbf{Initialization:} Sets initial cwnd=1, ssthresh=64, phase=SLOW\_START
+    \item \textbf{onAckReceived:} Main logic for handling ACKs, updating cwnd based on current phase and algorithm mode
+    \item \textbf{onTimeout:} Handles timeout events by resetting cwnd to 1 and ssthresh to cwnd/2
+    \item \textbf{handleFastRetransmit:} Reno-specific fast retransmit logic triggered on 3 duplicate ACKs
+    \item \textbf{updateRTT:} Updates estimated RTT using EWMA formula: \texttt{estimatedRTT = 0.875 * oldRTT + 0.125 * sampleRTT}
+    \item \textbf{Transmission Round Tracking:} Increments transmission round when ACKs for full window are received
+\end{itemize}
+
+\subsection{CongestionAwareProtocolIO Class}
+
+This class provides a client-side simulation layer:
+
+\begin{itemize}
+    \item \textbf{Packet Simulation:} Splits messages into simulated packets based on MSS (1460 bytes)
+    \item \textbf{ACK Simulation:} Generates ACKs for successfully transmitted packets after network delay
+    \item \textbf{Timeout Detection:} Monitors unacknowledged packets and triggers timeout when age exceeds 2*RTT
+    \item \textbf{Packet Loss Simulation:} Applies configurable packet loss rate to simulate network conditions
+    \item \textbf{Network Delay:} Simulates network latency with configurable delay parameter
+    \item \textbf{Backward Compatibility:} Messages are still sent via regular ProtocolIO, maintaining compatibility
+\end{itemize}
+
+\subsection{UI Integration}
+
+The congestion control UI is integrated into the main application:
+
+\begin{itemize}
+    \item \textbf{TabPane Layout:} Congestion control panel accessible via dedicated tab alongside client list
+    \item \textbf{Real-time Updates:} Metrics and graph update automatically on state changes
+    \item \textbf{Interactive Controls:} Toggle button to enable/disable, radio buttons for algorithm selection
+    \item \textbf{Graph Visualization:} LineChart displays cwnd vs transmission rounds with auto-scaling axes
+    \item \textbf{Activity Log:} TextArea displays chronological log of congestion control events
+\end{itemize}
+
+\subsection{Algorithm Accuracy}
+
+The implementation accurately follows TCP Tahoe and Reno specifications:
+
+\begin{itemize}
+    \item \textbf{Slow Start:} cwnd += 1 per ACK (exponential growth)
+    \item \textbf{Congestion Avoidance:} cwnd += 1/cwnd per ACK using fractional counter (linear growth)
+    \item \textbf{ssthresh Behavior:} Only decreases on congestion events, never increases
+    \item \textbf{Tahoe on 3 Duplicate ACKs:} ssthresh = cwnd/2, cwnd = 1, re-enter slow start
+    \item \textbf{Reno on 3 Duplicate ACKs:} ssthresh = cwnd/2, cwnd = ssthresh, enter fast recovery
+    \item \textbf{Fast Recovery:} cwnd += 1 per duplicate ACK, exit on new ACK
+\end{itemize}
+
 % Section 10: Result Analysis
 \section{Result Analysis}
 \label{sec:results}
@@ -856,6 +938,26 @@ The file sharing feature allows selective recipient targeting. Received files ar
 
 The client list dynamically updates as clients connect and disconnect, showing all active participants with their assigned IDs.
 
+\subsection{Congestion Control Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{screenshots/congestion_control.png}
+    \caption{TCP Congestion Control visualization showing real-time metrics, graph, and activity log}
+    \label{fig:congestion_control}
+\end{figure}
+
+The congestion control panel provides comprehensive visualization of TCP Tahoe and Reno algorithms. The screenshot shows:
+\begin{itemize}
+    \item Real-time metrics display (cwnd, ssthresh, RTT, phase)
+    \item Interactive graph showing cwnd evolution over transmission rounds
+    \item Network simulation controls (packet loss rate and delay sliders)
+    \item Activity log displaying congestion control events
+    \item Algorithm selection (Tahoe/Reno) and enable/disable toggle
+\end{itemize}
+
+The graph clearly demonstrates the different phases of congestion control: exponential growth during slow start, linear growth during congestion avoidance, and recovery events (timeout or fast retransmit).
+
 \subsection{Cross-Platform Compatibility}
 
 \begin{figure}[H]
@@ -909,6 +1011,7 @@ The implementation showcases several key achievements:
     \item \textbf{Cross-Platform:} Single codebase functions identically on Windows, macOS, and Linux
     \item \textbf{User Experience:} Professional UI with responsive interactions and intuitive controls
     \item \textbf{Reliability:} Robust error handling and connection management ensure stable operation
+    \item \textbf{Congestion Control:} Accurate implementation of TCP Tahoe and Reno algorithms with real-time visualization demonstrates deep understanding of network congestion management
 \end{itemize}
 
 The project successfully addresses all design objectives, providing a functional collaborative tool that demonstrates deep understanding of TCP socket programming, protocol design, and concurrent network application development. The implementation serves as a practical example of how networking concepts can be applied to create real-world collaborative applications.
@@ -935,6 +1038,8 @@ The project successfully addresses all design objectives, providing a functional
     \item \textbf{No Drawing Tools:} Only freehand drawing is supported. Shapes, text, and other drawing tools are not available.
     
     \item \textbf{Single Server:} No support for multiple servers or server clustering for high availability.
+    
+    \item \textbf{Congestion Control Simulation:} The congestion control implementation is a client-side simulation for visualization purposes and doesn't affect actual TCP protocol behavior.
 \end{enumerate}
 
 \section{Future Enhancements}
