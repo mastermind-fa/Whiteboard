@@ -122,33 +122,50 @@ public class MainController {
         colorPicker.setValue(Color.BLACK);
         strokeSlider.setValue(2.0);
 
-        // Make canvas responsive to container size
+        // Make canvas responsive to container size - unlimited size
         if (canvasContainer != null) {
-            // Bind canvas size to container size
+            // Bind canvas size to container size - no max constraints
             whiteboardCanvas.widthProperty().bind(canvasContainer.widthProperty());
             whiteboardCanvas.heightProperty().bind(canvasContainer.heightProperty());
             
             // Fill new areas with white when canvas grows (but preserve existing drawings)
             whiteboardCanvas.widthProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal.doubleValue() > oldVal.doubleValue()) {
+                if (newVal.doubleValue() > 0) {
                     Platform.runLater(() -> {
-                        gc.setFill(Color.WHITE);
-                        gc.fillRect(oldVal.doubleValue(), 0, newVal.doubleValue() - oldVal.doubleValue(), whiteboardCanvas.getHeight());
+                        if (newVal.doubleValue() > oldVal.doubleValue()) {
+                            // Fill new area with white
+                            gc.setFill(Color.WHITE);
+                            gc.fillRect(oldVal.doubleValue(), 0, newVal.doubleValue() - oldVal.doubleValue(), whiteboardCanvas.getHeight());
+                        } else if (oldVal.doubleValue() == 0 && newVal.doubleValue() > 0) {
+                            // Initial resize - fill entire canvas
+                            gc.setFill(Color.WHITE);
+                            gc.fillRect(0, 0, newVal.doubleValue(), whiteboardCanvas.getHeight());
+                        }
                     });
                 }
             });
             whiteboardCanvas.heightProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal.doubleValue() > oldVal.doubleValue()) {
+                if (newVal.doubleValue() > 0) {
                     Platform.runLater(() -> {
-                        gc.setFill(Color.WHITE);
-                        gc.fillRect(0, oldVal.doubleValue(), whiteboardCanvas.getWidth(), newVal.doubleValue() - oldVal.doubleValue());
+                        if (newVal.doubleValue() > oldVal.doubleValue()) {
+                            // Fill new area with white
+                            gc.setFill(Color.WHITE);
+                            gc.fillRect(0, oldVal.doubleValue(), whiteboardCanvas.getWidth(), newVal.doubleValue() - oldVal.doubleValue());
+                        } else if (oldVal.doubleValue() == 0 && newVal.doubleValue() > 0) {
+                            // Initial resize - fill entire canvas
+                            gc.setFill(Color.WHITE);
+                            gc.fillRect(0, 0, whiteboardCanvas.getWidth(), newVal.doubleValue());
+                        }
                     });
                 }
             });
         }
         
-        // Initial draw - fill entire canvas with white
-        redrawCanvas();
+        // Initial draw - fill entire canvas with white (will be called after layout)
+        Platform.runLater(() -> {
+            // Delay to ensure canvas has been laid out
+            Platform.runLater(() -> redrawCanvas());
+        });
 
         // Initialize congestion control UI
         initializeCongestionControlUI();

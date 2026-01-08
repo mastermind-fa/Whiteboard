@@ -68,4 +68,102 @@ root, .border-pane {
     -fx-font-family: "SF Pro Text", "Segoe UI", "Roboto", sans-serif;
 }
 
+/* Responsive layout improvements */
+.split-pane {
+    -fx-background-color: transparent;
+}
+
+.split-pane-divider {
+    -fx-background-color: #c9ceda;
+    -fx-padding: 0 2 0 2;
+}
+
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-fit-to-width: true;
+    -fx-fit-to-height: false;
+}
+
+.scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .content {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar {
+    -fx-background-color: #f0f2f7;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #c9ceda;
+    -fx-background-radius: 5;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #a8b0c0;
+}
+
+/* Canvas container - ensure it can grow without limits */
+.stack-pane {
+    -fx-background-color: white;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+    -fx-pref-width: -1;
+    -fx-pref-height: -1;
+    -fx-max-width: -1;
+    -fx-max-height: -1;
+}
+
+/* Tab pane styling for consistency */
+.tab-pane {
+    -fx-background-color: white;
+}
+
+.tab {
+    -fx-background-color: #f0f2f7;
+    -fx-padding: 8 16 8 16;
+}
+
+.tab:selected {
+    -fx-background-color: white;
+}
+
+.tab-label {
+    -fx-text-fill: #29323c;
+}
+
+.tab:selected .tab-label {
+    -fx-text-fill: #3355f0;
+    -fx-font-weight: bold;
+}
+
+/* Ensure BorderPane and SplitPane are fully responsive */
+.border-pane {
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+.split-pane .split-pane-divider {
+    -fx-background-color: #c9ceda;
+}
+
+/* Ensure all containers can grow */
+.vbox, .hbox {
+    -fx-min-width: 0;
+    -fx-min-height: 0;
+}
+
+/* TextArea and TextField consistency */
+.text-area, .text-field {
+    -fx-font-size: 13px;
+}
+
+/* Consistent button sizing */
+.button {
+    -fx-min-width: 60;
+}
+
 

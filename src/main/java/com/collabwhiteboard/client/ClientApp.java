@@ -25,6 +25,8 @@ public class ClientApp extends Application {
         } catch (Exception ignored) {
         }
         primaryStage.setScene(scene);
+        primaryStage.setMinWidth(800);
+        primaryStage.setMinHeight(600);
         primaryStage.centerOnScreen();
         primaryStage.show();
 
